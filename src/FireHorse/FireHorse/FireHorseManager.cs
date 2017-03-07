@@ -18,7 +18,7 @@ namespace FireHorse
         private static readonly ConcurrentQueue<ScraperData> Queue = new ConcurrentQueue<ScraperData>();
         private static readonly ConcurrentDictionary<string, short> Running = new ConcurrentDictionary<string, short>(40, 40);
         private static readonly ConcurrentDictionary<string, Action> EmptyQueueSubscriptions = new ConcurrentDictionary<string, Action>();
-        
+
         /// <summary>
         /// Get or Set max running workers at the same time. Default value is 40
         /// </summary>
@@ -46,7 +46,7 @@ namespace FireHorse
             {
                 return _consumers
                     .GroupBy(x => x.Status)
-                    .Select(y => new {StatusName = y.Key, Quantity = y.Count()})
+                    .Select(y => new { StatusName = y.Key, Quantity = y.Count() })
                     .ToDictionary(x => x.StatusName, x => x.Quantity);
             }
         }
@@ -58,7 +58,22 @@ namespace FireHorse
         {
             get { return _consumers.ToDictionary(x => x.Id, x => x.Status); }
         }
-        
+
+        /// <summary>
+        /// Get the amount of elements in running
+        /// </summary>
+        public static int CurrentRunningSize
+        {
+            get { return Running.Count; }
+        }
+
+        /// <summary>
+        /// Get the amount of elements in queue
+        /// </summary>
+        public static int CurrentQueueSize
+        {
+            get { return Queue.Count; }
+        }
 
         static FireHorseManager()
         {
@@ -73,10 +88,10 @@ namespace FireHorse
         /// <param name="data">Item to scraper</param>
         public static void Enqueue(ScraperData data)
         {
-            if(string.IsNullOrWhiteSpace(data.Url))
+            if (string.IsNullOrWhiteSpace(data.Url))
                 throw new ArgumentException("URL is required.");
 
-            if(data.OnDataArrived == null)
+            if (data.OnDataArrived == null)
                 throw new ArgumentException("OnDataArrived is required.");
 
             Queue.Enqueue(data);
@@ -100,7 +115,7 @@ namespace FireHorse
                     }
                 }
             }
-                
+
         }
 
         /// <summary>
@@ -109,7 +124,7 @@ namespace FireHorse
         public static void Stop()
         {
             _canRun = false;
-            while(_consumers.Any(x => x.Status == TaskStatus.Running) || _consumerMainThread.Status != TaskStatus.RanToCompletion)
+            while (_consumers.Any(x => x.Status == TaskStatus.Running) || _consumerMainThread.Status != TaskStatus.RanToCompletion)
                 Thread.Sleep(1000);
 
             _consumers = new ConcurrentBag<Task>();
@@ -199,9 +214,12 @@ namespace FireHorse
                     doc.LoadHtml(page);
                 }
 
+                //Delete from running
+                RemoveItemFromRunningCollection(item, runningId);
+
                 //Raise on data arrived event
                 item.OnDataArrived?.Invoke(item.Url, item.OptionalArguments, doc);
-                
+
             }
             catch (WebException ex)
             {
@@ -228,7 +246,7 @@ namespace FireHorse
                 }
             }
         }
-        
+
         private static void RemoveItemFromRunningCollection(ScraperData item, string key, int retryCount = 0)
         {
             short dummyValue;

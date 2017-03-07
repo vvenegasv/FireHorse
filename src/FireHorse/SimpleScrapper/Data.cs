@@ -1,19 +1,14 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
+using System.Text;
 using System.Threading.Tasks;
-using FireHorse;
-using HtmlAgilityPack;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace UnitTest
+namespace SimpleScrapper
 {
-    [TestClass]
-    public class SimpleScraperTester
+    internal static class Data
     {
-        private readonly IList<string> _urls = new List<string>()
+        public static readonly IList<string> URLS = new List<string>()
         {
             "http://amarillas.emol.com/acciones-y-valores",
             "http://amarillas.emol.com/aceite-de-rosa-mosqueta",
@@ -1016,52 +1011,5 @@ namespace UnitTest
             "http://www.aguasantofagasta.cl/videos.html/empresa/promesas/creacion-de-valor.html",
             "http://www.aguasantofagasta.cl/prestacion-fuera-de-t-o.html/empresa/ruta-del-agua.html"
         };
-
-        private DateTime? _emptyQueueTime = null;
-
-        [TestMethod]
-        public void TestGetSimpleUrl()
-        {
-            var emptyKeySubscription = FireHorseManager.SubscribeToEmptyQueue(OnEmptyQueue);
-
-            foreach (var url in _urls)
-            {
-                var item = new ScraperData();
-                item.Url = url;
-                item.OnDequeue = this.OnDequeue;
-                item.OnDataArrived = this.OnDataArrived;
-                item.OnThrownException = this.OnException;
-                FireHorseManager.Enqueue(item);
-            }
-
-            //System wait until all consumers end and empty queue event has raised
-            while(_emptyQueueTime.HasValue == false || (DateTime.Now - _emptyQueueTime).Value.TotalSeconds < 10 || FireHorseManager.ConsumersResume.Any(x => x.Key == TaskStatus.Running))
-                Thread.Sleep(2000);
-        }
-
-        private void OnDequeue(string url, IDictionary<string, string> optionalArguments)
-        {
-            
-        }
-
-        private void OnDataArrived(string url, IDictionary<string, string> optionalArguments, HtmlDocument htmlDocument)
-        {
-            
-        }
-
-        private void OnException(string url, IDictionary<string, string> optionalArguments, Exception ex)
-        {
-            
-        }
-
-        private void OnEmptyQueue()
-        {
-            _emptyQueueTime = DateTime.Now;
-        }
-
-        private void OnEnqueue()
-        {
-            _emptyQueueTime = null;
-        }
     }
 }

@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FireHorse", "FireHorse\Fire
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTest", "UnitTest\UnitTest.csproj", "{3C0C8A88-A40D-48E3-AF29-49694496D01B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleScrapper", "SimpleScrapper\SimpleScrapper.csproj", "{DA05F10B-CC59-4D83-B056-D4C2311A8E8F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{3C0C8A88-A40D-48E3-AF29-49694496D01B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3C0C8A88-A40D-48E3-AF29-49694496D01B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3C0C8A88-A40D-48E3-AF29-49694496D01B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DA05F10B-CC59-4D83-B056-D4C2311A8E8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA05F10B-CC59-4D83-B056-D4C2311A8E8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA05F10B-CC59-4D83-B056-D4C2311A8E8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA05F10B-CC59-4D83-B056-D4C2311A8E8F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
