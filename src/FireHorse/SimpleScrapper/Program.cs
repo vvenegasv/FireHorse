@@ -12,15 +12,13 @@ namespace SimpleScrapper
 {
     class Program
     {
-        private static DateTime? _emptyQueueTime = null;
-
         static void Main(string[] args)
         {
             Run();
             Console.ReadKey();
         }
 
-        private static async void Run()
+        private static void Run()
         {
             FireHorseManager.MaxRetryCount = 0;
             var chronometer = new Stopwatch();
@@ -37,7 +35,7 @@ namespace SimpleScrapper
             }
 
             //System wait until all consumers end and empty queue event has raised
-            while (FireHorseManager.CurrentRunningSize > 0 || FireHorseManager.ConsumersResume.Any(x => x.Key == TaskStatus.Running))
+            while (!FireHorseManager.IsEnded && !FireHorseManager.IsActive)
             {
                 Thread.Sleep(2000);
                 PrintData();
@@ -54,12 +52,11 @@ namespace SimpleScrapper
             Console.Clear();
             Console.WriteLine("");
             Console.WriteLine("Elementos en ejecución {0}", FireHorseManager.CurrentRunningSize);
+            //foreach (var item in FireHorseManager.CurrentRunningSizeByDomain)
+            //{
+            //    Console.WriteLine("Dominio:{0}, Cantidad:{1}", item.Key, item.Value);
+            //}
             Console.WriteLine("Elementos en cola {0}", FireHorseManager.CurrentQueueSize);
-            Console.WriteLine("Información de consumidores");
-            foreach (var a in FireHorseManager.ConsumersResume)
-            {
-                Console.WriteLine("Estado:{0}\tCantidad:{1}", a.Key, a.Value);
-            }
         }
 
         private static void OnDequeue(string url, IDictionary<string, string> optionalArguments)

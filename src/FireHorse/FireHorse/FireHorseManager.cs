@@ -13,52 +13,22 @@ namespace FireHorse
     {
         private static bool _canRun;
         private static bool _isRunning;
-        private static Task _consumerMainThread;
-        private static ConcurrentBag<Task> _consumers = new ConcurrentBag<Task>();
-        private static readonly ConcurrentQueue<ScraperData> Queue = new ConcurrentQueue<ScraperData>();
-        private static readonly ConcurrentDictionary<string, short> Running = new ConcurrentDictionary<string, short>(40, 40);
-        private static readonly ConcurrentDictionary<string, Action> EmptyQueueSubscriptions = new ConcurrentDictionary<string, Action>();
-
+        private static readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
+        //Dictionary with DictionaryId and Domain. Util to know how many running elements there is by domain
+        private static readonly ConcurrentDictionary<string, string> Running = new ConcurrentDictionary<string, string>(160, 9999);
+        //Dictionary with domain and task. It is use to stop and start the process
+        private static ConcurrentDictionary<string, Task> _queueThreads = new ConcurrentDictionary<string, Task>();
+      
         /// <summary>
         /// Get or Set max running workers at the same time. Default value is 40
         /// </summary>
-        public static int MaxRunningElements { get; set; } = 40;
+        public static int MaxRunningElementsByDomain { get; set; } = 40;
 
         /// <summary>
         /// Get or Set max retry counts or errors. Default value is 5
         /// </summary>
         public static int MaxRetryCount { get; set; } = 5;
-
-        /// <summary>
-        /// Get the state of main thread of web scraper task
-        /// </summary>
-        public static TaskStatus Status
-        {
-            get { return _consumerMainThread.Status; }
-        }
-
-        /// <summary>
-        /// Get the resume of current workers
-        /// </summary>
-        public static IDictionary<TaskStatus, int> ConsumersResume
-        {
-            get
-            {
-                return _consumers
-                    .GroupBy(x => x.Status)
-                    .Select(y => new { StatusName = y.Key, Quantity = y.Count() })
-                    .ToDictionary(x => x.StatusName, x => x.Quantity);
-            }
-        }
-
-        /// <summary>
-        /// Get the detail of current workers
-        /// </summary>
-        public static IDictionary<int, TaskStatus> ConsumersDetails
-        {
-            get { return _consumers.ToDictionary(x => x.Id, x => x.Status); }
-        }
-
+        
         /// <summary>
         /// Get the amount of elements in running
         /// </summary>
@@ -68,17 +38,48 @@ namespace FireHorse
         }
 
         /// <summary>
+        /// Get the amount of elements in running by domain
+        /// </summary>
+        public static IDictionary<string, int> CurrentRunningSizeByDomain
+        {
+            get
+            {
+                return Running
+                    .GroupBy(x => x.Value)
+                    .Select(y => new {Domain = y.Key, Quantity = y.Count()})
+                    .ToDictionary(x => x.Domain, x => x.Quantity);
+            }
+        }
+
+        /// <summary>
         /// Get the amount of elements in queue
         /// </summary>
         public static int CurrentQueueSize
         {
-            get { return Queue.Count; }
+            get { return Queues.Select(x => x.Value.Count).Sum(); }
+        }
+
+        /// <summary>
+        /// Check if process end. Return true if Queue is empty and there isn't running elements.
+        /// </summary>
+        /// <returns></returns>
+        public static bool IsEnded
+        {
+            get { return !(FireHorseManager.CurrentRunningSize > 0 || FireHorseManager.CurrentQueueSize > 0); }
+        }
+
+        /// <summary>
+        /// Check if process is running. It returns true if process is wating for items, no matter if queue is empty or not
+        /// </summary>
+        public static bool IsActive
+        {
+            get { return _isRunning; }
         }
 
         static FireHorseManager()
         {
             _canRun = true;
-            _consumerMainThread = Task.Factory.StartNew(() => Consume());
+            //_consumerMainThread = Task.Factory.StartNew(() => Consume());
         }
 
         /// <summary>
@@ -94,7 +95,51 @@ namespace FireHorse
             if (data.OnDataArrived == null)
                 throw new ArgumentException("OnDataArrived is required.");
 
-            Queue.Enqueue(data);
+            Uri uri;
+            if(!Uri.TryCreate(data.Url, UriKind.RelativeOrAbsolute, out uri))
+                throw new ArgumentException("URL '{0}' is invalid", data.Url);
+
+            //gets the domain
+            var domain = uri.Authority.ToLower();
+
+            //Check if exists a queue from domain
+            if (Queues.Any(x => x.Key == domain))
+            {
+                var queue = Queues[domain];
+                queue.Enqueue(new ScraperDataWrapper()
+                {
+                    Domain = domain,
+                    Uri = uri,
+                    Url = data.Url,
+                    OptionalArguments = data.OptionalArguments,
+                    OnThrownException = data.OnThrownException,
+                    OnDequeue = data.OnDequeue,
+                    OnDataArrived = data.OnDataArrived
+                });
+            }
+            else
+            {
+                var queue = new ConcurrentQueue<ScraperDataWrapper>();
+                queue.Enqueue(new ScraperDataWrapper()
+                {
+                    Domain = domain,
+                    Uri = uri,
+                    Url = data.Url,
+                    OptionalArguments = data.OptionalArguments,
+                    OnThrownException = data.OnThrownException,
+                    OnDequeue = data.OnDequeue,
+                    OnDataArrived = data.OnDataArrived
+                });
+                if(!Queues.TryAdd(domain, queue))
+                    throw new Exception("Unexpected error when try to create a new Queue for domain " + domain);
+
+                //start a new queue process
+                var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue));
+                if(!_queueThreads.TryAdd(domain, t))
+                    throw new Exception("Unexpected error when try to add task of queue on QueueThreads for domain " + domain);
+            }
+
+            
         }
 
         /// <summary>
@@ -111,7 +156,11 @@ namespace FireHorse
                     if (!_isRunning)
                     {
                         _isRunning = true;
-                        _consumerMainThread = Task.Factory.StartNew(() => Consume());
+                        foreach (var queue in Queues)
+                        {
+                            var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue.Value));
+                            _queueThreads.TryAdd(queue.Key, t);
+                        }
                     }
                 }
             }
@@ -119,57 +168,38 @@ namespace FireHorse
         }
 
         /// <summary>
-        /// Stop scraper process. Need to be manually started before stop it. It clear the current worker list
+        /// Stop scraper process. Need to be manually started before stop it.
         /// </summary>
         public static void Stop()
         {
             _canRun = false;
-            while (_consumers.Any(x => x.Status == TaskStatus.Running) || _consumerMainThread.Status != TaskStatus.RanToCompletion)
-                Thread.Sleep(1000);
+            //waits for all queue threads end
+            while(_queueThreads.Any(x => x.Value.Status == TaskStatus.Running))
+                Thread.Sleep(2000);
 
-            _consumers = new ConcurrentBag<Task>();
+            //waits for all running elements finishing
+            while(FireHorseManager.CurrentRunningSize > 0)
+                Thread.Sleep(2000);
+
+            _isRunning = false;
+            _queueThreads = new ConcurrentDictionary<string, Task>();
         }
-
-        /// <summary>
-        /// Subscribe to an event that is raised when queue is empty
-        /// </summary>
-        /// <param name="callback">Function to call when this event is fired</param>
-        /// <returns>Key to unsuscribe to this event</returns>
-        public static string SubscribeToEmptyQueue(Action callback)
+        
+        private static async void ConsumeFromQueue(ConcurrentQueue<ScraperDataWrapper> queue)
         {
-            var key = Guid.NewGuid().ToString();
-            EmptyQueueSubscriptions.TryAdd(key, callback);
-            return key;
-        }
-
-        /// <summary>
-        /// Unsubscribe to empty queue event
-        /// </summary>
-        /// <param name="key">Key of subscription returned on SubscribeToEmptyQueue method</param>
-        public static void UnsubscribeToEmptyQueue(string key)
-        {
-            Action dummyCallback;
-            EmptyQueueSubscriptions.TryRemove(key, out dummyCallback);
-        }
-
-
-
-
-        private static void Consume()
-        {
-            _isRunning = true;
-            ScraperData item;
             int throtledCount = 0;
+            ScraperDataWrapper item;
             while (_canRun)
             {
-                while (Queue.TryDequeue(out item))
+                while (queue.TryDequeue(out item))
                 {
                     var itemSafeClosure = item;
-                    if (Running.Count >= MaxRunningElements)
+                    if (Running.Count(x => x.Value == item.Domain) >= MaxRunningElementsByDomain)
                     {
                         throtledCount++;
-                        Queue.Enqueue(itemSafeClosure);
-                        Thread.Sleep(throtledCount * 50);
+                        queue.Enqueue(itemSafeClosure);
+                        //Thread.Sleep(throtledCount * 50);
+                        await Task.Delay(throtledCount*50);
                         break;
                     }
                     else
@@ -177,29 +207,24 @@ namespace FireHorse
 
                     //Update running elements
                     var runningId = Guid.NewGuid().ToString();
-                    if (Running.TryAdd(runningId, 0))
+                    if (Running.TryAdd(runningId, item.Domain))
                     {
                         //Get HTML from WebServer
-                        var t = Task.Factory.StartNew(() => GetDataFromWebServer(runningId, itemSafeClosure));
-                        _consumers.Add(t);
+                        Task.Factory.StartNew(() => GetDataFromWebServer(runningId, itemSafeClosure));
                     }
                     else
                     {
-                        Queue.Enqueue(item);
+                        queue.Enqueue(item);
                     }
                 }
 
-                if (!Queue.Any())
-                {
+                //Sleep process while queue is empty
+                if (queue.IsEmpty)
                     Thread.Sleep(3000);
-                    if (!Queue.Any())
-                        NotifyQueueIsEmpty();
-                }
             }
-            _isRunning = false;
         }
 
-        private static void GetDataFromWebServer(string runningId, ScraperData item, int retryCount = 0)
+        private static void GetDataFromWebServer(string runningId, ScraperDataWrapper item, int retryCount = 0)
         {
             try
             {
@@ -210,18 +235,36 @@ namespace FireHorse
                 var doc = new HtmlDocument();
                 using (var webClient = new WebClient())
                 {
-                    string page = webClient.DownloadString(item.Url);
-                    doc.LoadHtml(page);
+                    webClient.DownloadStringCompleted += (sender, args) =>
+                    {
+                        if (args.Error != null)
+                        {
+                            ExceptionHandlerOnDownloadData(args.Error, item, runningId, retryCount);
+                            return;
+                        }
+
+                        //Load html
+                        doc.LoadHtml(args.Result);
+
+                        //Delete from running
+                        RemoveItemFromRunningCollection(item, runningId);
+
+                        //Raise on data arrived event
+                        item.OnDataArrived?.Invoke(item.Url, item.OptionalArguments, doc);
+                    };
+
+                    webClient.DownloadStringAsync(item.Uri);
                 }
-
-                //Delete from running
-                RemoveItemFromRunningCollection(item, runningId);
-
-                //Raise on data arrived event
-                item.OnDataArrived?.Invoke(item.Url, item.OptionalArguments, doc);
-
             }
-            catch (WebException ex)
+            catch (Exception ex)
+            {
+                ExceptionHandlerOnDownloadData(ex, item, runningId, retryCount);
+            }
+        }
+
+        private static void ExceptionHandlerOnDownloadData(Exception ex, ScraperDataWrapper item, string runningId, int retryCount)
+        {
+            if (ex is WebException)
             {
                 if (retryCount < MaxRetryCount)
                 {
@@ -237,7 +280,7 @@ namespace FireHorse
                     }
                 }
             }
-            catch (Exception ex)
+            else
             {
                 if (item.OnThrownException != null)
                 {
@@ -249,7 +292,7 @@ namespace FireHorse
 
         private static void RemoveItemFromRunningCollection(ScraperData item, string key, int retryCount = 0)
         {
-            short dummyValue;
+            string dummyValue;
             if (!Running.TryRemove(key, out dummyValue))
             {
                 if (retryCount < MaxRetryCount)
@@ -259,10 +302,5 @@ namespace FireHorse
             }
         }
 
-        private static void NotifyQueueIsEmpty()
-        {
-            foreach (var subscription in EmptyQueueSubscriptions)
-                subscription.Value?.Invoke();
-        }
     }
 }

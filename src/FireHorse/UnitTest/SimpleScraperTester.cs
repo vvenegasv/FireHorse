@@ -1022,7 +1022,6 @@ namespace UnitTest
         [TestMethod]
         public void TestGetSimpleUrl()
         {
-            var emptyKeySubscription = FireHorseManager.SubscribeToEmptyQueue(OnEmptyQueue);
 
             foreach (var url in _urls)
             {
@@ -1035,7 +1034,7 @@ namespace UnitTest
             }
 
             //System wait until all consumers end and empty queue event has raised
-            while(_emptyQueueTime.HasValue == false || (DateTime.Now - _emptyQueueTime).Value.TotalSeconds < 10 || FireHorseManager.ConsumersResume.Any(x => x.Key == TaskStatus.Running))
+            while (FireHorseManager.CurrentRunningSize > 0 || FireHorseManager.CurrentQueueSize > 0)
                 Thread.Sleep(2000);
         }
 
@@ -1052,16 +1051,6 @@ namespace UnitTest
         private void OnException(string url, IDictionary<string, string> optionalArguments, Exception ex)
         {
             
-        }
-
-        private void OnEmptyQueue()
-        {
-            _emptyQueueTime = DateTime.Now;
-        }
-
-        private void OnEnqueue()
-        {
-            _emptyQueueTime = null;
         }
     }
 }
