@@ -11,6 +11,7 @@ namespace FireHorse
 {
     public static class FireHorseManager
     {
+        private static Action _onFinish;
         private static bool _canRun;
         private static bool _isRunning;
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
@@ -18,7 +19,7 @@ namespace FireHorse
         private static readonly ConcurrentDictionary<string, string> Running = new ConcurrentDictionary<string, string>(160, 9999);
         //Dictionary with domain and task. It is use to stop and start the process
         private static ConcurrentDictionary<string, Task> _queueThreads = new ConcurrentDictionary<string, Task>();
-      
+
         /// <summary>
         /// Get or Set max running workers at the same time. Default value is 40
         /// </summary>
@@ -28,7 +29,7 @@ namespace FireHorse
         /// Get or Set max retry counts or errors. Default value is 5
         /// </summary>
         public static int MaxRetryCount { get; set; } = 5;
-        
+
         /// <summary>
         /// Get the amount of elements in running
         /// </summary>
@@ -46,7 +47,7 @@ namespace FireHorse
             {
                 return Running
                     .GroupBy(x => x.Value)
-                    .Select(y => new {Domain = y.Key, Quantity = y.Count()})
+                    .Select(y => new { Domain = y.Key, Quantity = y.Count() })
                     .ToDictionary(x => x.Domain, x => x.Quantity);
             }
         }
@@ -96,7 +97,7 @@ namespace FireHorse
                 throw new ArgumentException("OnDataArrived is required.");
 
             Uri uri;
-            if(!Uri.TryCreate(data.Url, UriKind.RelativeOrAbsolute, out uri))
+            if (!Uri.TryCreate(data.Url, UriKind.RelativeOrAbsolute, out uri))
                 throw new ArgumentException("URL '{0}' is invalid", data.Url);
 
             //gets the domain
@@ -130,16 +131,16 @@ namespace FireHorse
                     OnDequeue = data.OnDequeue,
                     OnDataArrived = data.OnDataArrived
                 });
-                if(!Queues.TryAdd(domain, queue))
+                if (!Queues.TryAdd(domain, queue))
                     throw new Exception("Unexpected error when try to create a new Queue for domain " + domain);
 
                 //start a new queue process
                 var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue));
-                if(!_queueThreads.TryAdd(domain, t))
+                if (!_queueThreads.TryAdd(domain, t))
                     throw new Exception("Unexpected error when try to add task of queue on QueueThreads for domain " + domain);
             }
 
-            
+
         }
 
         /// <summary>
@@ -174,17 +175,17 @@ namespace FireHorse
         {
             _canRun = false;
             //waits for all queue threads end
-            while(_queueThreads.Any(x => x.Value.Status == TaskStatus.Running))
+            while (_queueThreads.Any(x => x.Value.Status == TaskStatus.Running))
                 Thread.Sleep(2000);
 
             //waits for all running elements finishing
-            while(FireHorseManager.CurrentRunningSize > 0)
+            while (FireHorseManager.CurrentRunningSize > 0)
                 Thread.Sleep(2000);
 
             _isRunning = false;
             _queueThreads = new ConcurrentDictionary<string, Task>();
         }
-        
+
         private static async void ConsumeFromQueue(ConcurrentQueue<ScraperDataWrapper> queue)
         {
             int throtledCount = 0;
@@ -199,7 +200,7 @@ namespace FireHorse
                         throtledCount++;
                         queue.Enqueue(itemSafeClosure);
                         //Thread.Sleep(throtledCount * 50);
-                        await Task.Delay(throtledCount*50);
+                        await Task.Delay(throtledCount * 50);
                         break;
                     }
                     else
@@ -300,6 +301,17 @@ namespace FireHorse
                 else
                     item.OnThrownException?.Invoke(item.Url, item.OptionalArguments, new Exception("The scraper data item cannot be deleted from running collection."));
             }
+
+            bool isFinished = !(!FireHorseManager.IsEnded && !FireHorseManager.IsActive);
+            if (isFinished)
+            {
+                _onFinish();
+            }
+        }
+
+        public static void OnFinish(Action action)
+        {
+            _onFinish = action;
         }
 
     }
