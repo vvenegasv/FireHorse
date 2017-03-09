@@ -34,21 +34,6 @@ namespace SimpleScrapper
                 FireHorseManager.Enqueue(item);
             }
 
-            //System wait until all consumers end and empty queue event has raised
-            //while (!FireHorseManager.IsEnded && !FireHorseManager.IsActive)
-            //{
-            //    Thread.Sleep(2000);
-            //    PrintData();
-            //}
-
-            FireHorseManager.OnFinish(() => Console.Write("proceso finalizado"));
-
-
-
-            //chronometer.Stop();
-
-            //Console.WriteLine("El proceso tardo {0}", chronometer.Elapsed.TotalSeconds);
-            //Console.WriteLine("Proceso finalizado. Presione cualquier tecla para finalizar");
         }
 
         public static void PrintData()

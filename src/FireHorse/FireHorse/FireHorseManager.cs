@@ -14,6 +14,8 @@ namespace FireHorse
         private static Action _onFinish;
         private static bool _canRun;
         private static bool _isRunning;
+        private static int _activeTask;
+
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
         //Dictionary with DictionaryId and Domain. Util to know how many running elements there is by domain
         private static readonly ConcurrentDictionary<string, string> Running = new ConcurrentDictionary<string, string>(160, 9999);
@@ -83,6 +85,7 @@ namespace FireHorse
             //_consumerMainThread = Task.Factory.StartNew(() => Consume());
         }
 
+
         /// <summary>
         /// Enqueue a item
         /// </summary>
@@ -103,6 +106,7 @@ namespace FireHorse
             //gets the domain
             var domain = uri.Authority.ToLower();
 
+
             //Check if exists a queue from domain
             if (Queues.Any(x => x.Key == domain))
             {
@@ -115,11 +119,17 @@ namespace FireHorse
                     OptionalArguments = data.OptionalArguments,
                     OnThrownException = data.OnThrownException,
                     OnDequeue = data.OnDequeue,
-                    OnDataArrived = data.OnDataArrived
+                    OnDataArrived = data.OnDataArrived,
+                    FinishTask = CreateCompleteTask(data)
                 });
+                Console.WriteLine("Add task domain {0}, url {1}", domain, data.Url);
+
+                _activeTask++;
+
             }
             else
             {
+                var closureData = data;
                 var queue = new ConcurrentQueue<ScraperDataWrapper>();
                 queue.Enqueue(new ScraperDataWrapper()
                 {
@@ -129,18 +139,37 @@ namespace FireHorse
                     OptionalArguments = data.OptionalArguments,
                     OnThrownException = data.OnThrownException,
                     OnDequeue = data.OnDequeue,
-                    OnDataArrived = data.OnDataArrived
+                    OnDataArrived = data.OnDataArrived,
+                    FinishTask = CreateCompleteTask(data)
                 });
                 if (!Queues.TryAdd(domain, queue))
                     throw new Exception("Unexpected error when try to create a new Queue for domain " + domain);
-
                 //start a new queue process
                 var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue));
+
+                Console.WriteLine("Add task domain {0}, url {1}", domain, data.Url);
+
+                _activeTask++;
+
                 if (!_queueThreads.TryAdd(domain, t))
                     throw new Exception("Unexpected error when try to add task of queue on QueueThreads for domain " + domain);
             }
 
 
+        }
+
+        private static Action CreateCompleteTask(ScraperData TaskInfo)
+        {
+            return () =>
+            {
+                Console.WriteLine("Removings Task {0}", TaskInfo.Url);
+                _activeTask--;
+                Console.WriteLine("Active tasks {0}", _activeTask);
+                if (_activeTask == 0)
+                {
+                    End();
+                }
+            };
         }
 
         /// <summary>
@@ -302,17 +331,17 @@ namespace FireHorse
                     item.OnThrownException?.Invoke(item.Url, item.OptionalArguments, new Exception("The scraper data item cannot be deleted from running collection."));
             }
 
-            bool isFinished = !(!FireHorseManager.IsEnded && !FireHorseManager.IsActive);
-            if (isFinished)
-            {
-                _onFinish();
-            }
+            item.FinishTask();
         }
 
-        public static void OnFinish(Action action)
+        private static void End()
         {
-            _onFinish = action;
+            OnFinish?.Invoke();
+            Console.WriteLine("proceso finalizado");
         }
+
+        public static Action OnFinish { get; set; }
+      
 
     }
 }
