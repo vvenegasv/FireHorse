@@ -12,6 +12,7 @@ namespace FireHorse
         public delegate void DequeueEvent(string url, IDictionary<string, string> optionalArguments);
         public delegate void DataArrivedEvent(string url, IDictionary<string, string> optionalArguments, HtmlDocument htmlDocument);
         public delegate void ThrownExceptionEvent(string url, IDictionary<string, string> optionalArguments, Exception ex);
+        public Action FinishTask { get; set; }
 
         /// <summary>
         /// Required
