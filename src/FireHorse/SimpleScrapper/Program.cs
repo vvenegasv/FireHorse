@@ -6,72 +6,122 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using FireHorse;
+using FireHorse.Dto;
 using HtmlAgilityPack;
 
 namespace SimpleScrapper
 {
     class Program
     {
+        private static int _readCount = 0;
+        private static int _errorCount = 0;
+        private static int _totalElementsCount = 1;
+        private static Stopwatch _chronometer;
+        private static bool _wasFinish;
+        private static AutoResetEvent _waitHandle = new AutoResetEvent(false);
+
         static void Main(string[] args)
         {
             Run();
-            Console.ReadKey();
         }
 
         private static void Run()
         {
+            _wasFinish = false;
+            var subscriptionKey = FireHorseManager.SubscribeToEndProcess(OnFinish);
+            
             FireHorseManager.MaxRetryCount = 0;
-            var chronometer = new Stopwatch();
-            chronometer.Start();
+            _chronometer = new Stopwatch();
+            _chronometer.Start();
 
-            foreach (var url in Data.URLS)
+            
+            foreach (var url in Data.URLS.Where(x => !x.Contains("aguasantofagasta")))
             {
                 var item = new ScraperData();
                 item.Url = url;
                 item.OnDequeue = OnDequeue;
                 item.OnDataArrived = OnDataArrived;
                 item.OnThrownException = OnException;
+                item.ScraperType = ScraperType.String;
                 FireHorseManager.Enqueue(item);
+                _totalElementsCount++;
             }
-
-            //System wait until all consumers end and empty queue event has raised
-            while (!FireHorseManager.IsEnded && !FireHorseManager.IsActive)
-            {
-                Thread.Sleep(2000);
-                PrintData();
-            }
-
-            chronometer.Stop();
             
-            Console.WriteLine("El proceso tardo {0}", chronometer.Elapsed.TotalSeconds);
+
+            FireHorseManager.Enqueue(new ScraperData
+            {
+                Url = Data.URLFILE,
+                OnDequeue = OnDequeue,
+                OnDataArrived = OnDataArrived,
+                OnThrownException = OnException,
+                ScraperType = ScraperType.Binary
+            });
+
+            Task.Factory.StartNew(() => PrintData());
+
+            //Waits for an event
+            _waitHandle.WaitOne();
+            
+        }
+
+        public static async void PrintData()
+        {
+            while (!_wasFinish)
+            {
+                Console.Clear();
+                Console.WriteLine("");
+                Console.WriteLine("Elementos leidos {0}", _readCount);
+                Console.WriteLine("Elementos con errores {0}", _errorCount);
+                Console.WriteLine("Elementos finalizados {0}", _readCount + _errorCount);
+                Console.WriteLine("Elementos ingresados en queue {0}", _totalElementsCount);
+                Console.WriteLine("Elementos en ejecución {0}", FireHorseManager.CurrentRunningSize);
+                Console.WriteLine("Cantidad de colas {0}", FireHorseManager.CurrentQueues);
+                Console.WriteLine("Elementos en cola {0}", FireHorseManager.CurrentQueueSize);
+
+                Console.WriteLine("Detalle de Colas");
+                Console.WriteLine("==================");
+                foreach (var item in FireHorseManager.CurrentRunningSizeByDomain)
+                {
+                    Console.WriteLine("Dominio:{0}, Cantidad:{1}", item.Key, item.Value);
+                }
+
+                await Task.Delay(2000);
+            }
+        }
+
+        private static void OnDequeue(ScraperDataResponse response)
+        {
+
+        }
+
+        private static void OnDataArrived(ScraperDataResponse response)
+        {
+            switch (response.ScraperType)
+            {
+                case ScraperType.Binary:
+                    var data = (byte[]) response.Response;
+                    break;
+                case ScraperType.String:
+                    var html = (string) response.Response;
+                    break;
+                default:
+                    throw new Exception("Tipo de scraper inválido");
+            }
+            _readCount++;
+        }
+
+        private static void OnException(ScraperDataResponse response)
+        {
+            _errorCount++;
+        }
+
+        private static void OnFinish()
+        {
+            _chronometer.Stop();
+            _wasFinish = true;
+            Console.WriteLine("El proceso tardo {0}", _chronometer.Elapsed.TotalSeconds);
             Console.WriteLine("Proceso finalizado. Presione cualquier tecla para finalizar");
-        }
-
-        public static void PrintData()
-        {
-            Console.Clear();
-            Console.WriteLine("");
-            Console.WriteLine("Elementos en ejecución {0}", FireHorseManager.CurrentRunningSize);
-            //foreach (var item in FireHorseManager.CurrentRunningSizeByDomain)
-            //{
-            //    Console.WriteLine("Dominio:{0}, Cantidad:{1}", item.Key, item.Value);
-            //}
-            Console.WriteLine("Elementos en cola {0}", FireHorseManager.CurrentQueueSize);
-        }
-
-        private static void OnDequeue(string url, IDictionary<string, string> optionalArguments)
-        {
-
-        }
-
-        private static void OnDataArrived(string url, IDictionary<string, string> optionalArguments, HtmlDocument htmlDocument)
-        {
-
-        }
-
-        private static void OnException(string url, IDictionary<string, string> optionalArguments, Exception ex)
-        {
-
+            _waitHandle.Set();
         }
     }
 }

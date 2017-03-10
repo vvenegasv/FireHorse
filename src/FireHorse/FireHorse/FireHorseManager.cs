@@ -3,9 +3,11 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using HtmlAgilityPack;
+using FireHorse.Dto;
+using FireHorse.Mappers;
 
 namespace FireHorse
 {
@@ -13,12 +15,15 @@ namespace FireHorse
     {
         private static bool _canRun;
         private static bool _isRunning;
+        //Dictionary with domain and concurrent queue.
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
         //Dictionary with DictionaryId and Domain. Util to know how many running elements there is by domain
         private static readonly ConcurrentDictionary<string, string> Running = new ConcurrentDictionary<string, string>(160, 9999);
+        //Dictionary with subscription to notify when process ends
+        private static readonly ConcurrentDictionary<string, Action> SubscriptionOnEnd = new ConcurrentDictionary<string, Action>();
         //Dictionary with domain and task. It is use to stop and start the process
         private static ConcurrentDictionary<string, Task> _queueThreads = new ConcurrentDictionary<string, Task>();
-      
+        
         /// <summary>
         /// Get or Set max running workers at the same time. Default value is 40
         /// </summary>
@@ -59,13 +64,18 @@ namespace FireHorse
             get { return Queues.Select(x => x.Value.Count).Sum(); }
         }
 
+        public static int CurrentQueues
+        {
+            get { return Queues.Count; }
+        }
+
         /// <summary>
         /// Check if process end. Return true if Queue is empty and there isn't running elements.
         /// </summary>
         /// <returns></returns>
         public static bool IsEnded
         {
-            get { return !(FireHorseManager.CurrentRunningSize > 0 || FireHorseManager.CurrentQueueSize > 0); }
+            get { return Queues.IsEmpty && Running.IsEmpty; }
         }
 
         /// <summary>
@@ -79,11 +89,11 @@ namespace FireHorse
         static FireHorseManager()
         {
             _canRun = true;
-            //_consumerMainThread = Task.Factory.StartNew(() => Consume());
+            _isRunning = true;
         }
 
         /// <summary>
-        /// Enqueue a item
+        /// Enqueue a response. Start process if was manually stoped
         /// </summary>
         /// <exception cref="ArgumentException">If Url or OnDataArrived is not provider</exception>
         /// <param name="data">Item to scraper</param>
@@ -106,35 +116,17 @@ namespace FireHorse
             if (Queues.Any(x => x.Key == domain))
             {
                 var queue = Queues[domain];
-                queue.Enqueue(new ScraperDataWrapper()
-                {
-                    Domain = domain,
-                    Uri = uri,
-                    Url = data.Url,
-                    OptionalArguments = data.OptionalArguments,
-                    OnThrownException = data.OnThrownException,
-                    OnDequeue = data.OnDequeue,
-                    OnDataArrived = data.OnDataArrived
-                });
+                queue.Enqueue(ScrapperMapper.ToWrapper(data, domain, uri));
             }
             else
             {
                 var queue = new ConcurrentQueue<ScraperDataWrapper>();
-                queue.Enqueue(new ScraperDataWrapper()
-                {
-                    Domain = domain,
-                    Uri = uri,
-                    Url = data.Url,
-                    OptionalArguments = data.OptionalArguments,
-                    OnThrownException = data.OnThrownException,
-                    OnDequeue = data.OnDequeue,
-                    OnDataArrived = data.OnDataArrived
-                });
+                queue.Enqueue(ScrapperMapper.ToWrapper(data, domain, uri));
                 if(!Queues.TryAdd(domain, queue))
                     throw new Exception("Unexpected error when try to create a new Queue for domain " + domain);
 
                 //start a new queue process
-                var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue));
+                var t = Task.Factory.StartNew(() => ConsumeFromQueue(domain, queue));
                 if(!_queueThreads.TryAdd(domain, t))
                     throw new Exception("Unexpected error when try to add task of queue on QueueThreads for domain " + domain);
             }
@@ -158,7 +150,7 @@ namespace FireHorse
                         _isRunning = true;
                         foreach (var queue in Queues)
                         {
-                            var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue.Value));
+                            var t = Task.Factory.StartNew(() => ConsumeFromQueue(queue.Key, queue.Value));
                             _queueThreads.TryAdd(queue.Key, t);
                         }
                     }
@@ -168,7 +160,8 @@ namespace FireHorse
         }
 
         /// <summary>
-        /// Stop scraper process. Need to be manually started before stop it.
+        /// Stop scraper process. Need to be manually started before stop it. 
+        /// Also, it will be automatically started when put a new response in queue
         /// </summary>
         public static void Stop()
         {
@@ -184,21 +177,61 @@ namespace FireHorse
             _isRunning = false;
             _queueThreads = new ConcurrentDictionary<string, Task>();
         }
+
+        /// <summary>
+        /// Subscribe to an event that will be fired when queue is empty and there is no more items to process
+        /// </summary>
+        /// <exception cref="ArgumentNullException">If subscription is null</exception>
+        /// <exception cref="Exception">If cannot be add a new element in subscription list</exception>
+        /// <returns></returns>
+        public static string SubscribeToEndProcess(Action subscription)
+        {
+            if(subscription==null)
+                throw new ArgumentNullException("subscription", "The subscription parameter is required. It cannot be null");
+
+            var key = Guid.NewGuid().ToString();
+            if(!SubscriptionOnEnd.TryAdd(key, subscription))
+                throw new Exception("Unable to add new subscription for end process");
+            return key;
+        }
+
+        /// <summary>
+        /// Unsuscribe to end process event
+        /// </summary>
+        /// <exception cref="ArgumentNullException">If key is null or empty</exception>
+        /// <exception cref="ArgumentException">If key provided not exists in subscription list</exception>
+        /// <exception cref="Exception">If cannot be remove the element of subscription list</exception>
+        /// <param name="key">Key of subscription returned by SubscribeToEndProcess</param>
+        public static void UnsuscribeToEndProcess(string key)
+        {
+            if(string.IsNullOrWhiteSpace(key))
+                throw new ArgumentNullException("key", "The key parameter is requiered. It cannot be empty or null");
+
+            if (!SubscriptionOnEnd.Any(x => x.Key == key))
+                throw new ArgumentException("The key parameter does not exists in subscription list", "key");
+
+            Action dummyAction;
+            if(!SubscriptionOnEnd.TryRemove(key, out dummyAction))
+                throw new Exception("Unable to remove the subscription for key " + key);
+        }
+
         
-        private static async void ConsumeFromQueue(ConcurrentQueue<ScraperDataWrapper> queue)
+        private static async void ConsumeFromQueue(string domain, ConcurrentQueue<ScraperDataWrapper> queue)
         {
             int throtledCount = 0;
+            int emptyQueueCount = 0;
             ScraperDataWrapper item;
             while (_canRun)
             {
                 while (queue.TryDequeue(out item))
                 {
+                    emptyQueueCount = 0;
+
                     var itemSafeClosure = item;
                     if (Running.Count(x => x.Value == item.Domain) >= MaxRunningElementsByDomain)
                     {
                         throtledCount++;
                         queue.Enqueue(itemSafeClosure);
-                        //Thread.Sleep(throtledCount * 50);
                         await Task.Delay(throtledCount*50);
                         break;
                     }
@@ -220,41 +253,73 @@ namespace FireHorse
 
                 //Sleep process while queue is empty
                 if (queue.IsEmpty)
-                    Thread.Sleep(3000);
+                {
+                    //try to remove the queue if it's empty
+                    if (emptyQueueCount > MaxRetryCount)
+                    {
+                        //Send a signal to inform that process is out
+                        OnConsumeFromQueueOut(domain);
+                        return;
+                    }
+                    else
+                    {
+                        emptyQueueCount++;
+                        await Task.Delay(3000);
+                    }
+                }
             }
+
+            //Send a signal to inform that the process is out
+            OnConsumeFromQueueOut(domain);
+        }
+
+        /// <summary>
+        /// Remove the queue from Queues. 
+        /// </summary>
+        /// <param name="domain">Domain</param>
+        private static void OnConsumeFromQueueOut(string domain)
+        {
+            Task.Factory.StartNew(() =>
+            {
+                var lockObject = new Object();
+                ConcurrentQueue<ScraperDataWrapper> dummyQueue;
+                lock (lockObject)
+                {
+                    //Check if queue is empty
+                    if (Queues[domain].IsEmpty)
+                    {
+                        if (Queues.TryRemove(domain, out dummyQueue))
+                        {
+                            Task t;
+                            _queueThreads.TryRemove(domain, out t);
+                        }
+                    }
+                }
+            });
         }
 
         private static void GetDataFromWebServer(string runningId, ScraperDataWrapper item, int retryCount = 0)
         {
             try
             {
+                //Create response object
+                var response = ScrapperMapper.ToResponse(item);
+
                 //Raise on dequeue event
-                item.OnDequeue?.Invoke(item.Url, item.OptionalArguments);
+                item.OnDequeue?.Invoke(response);
 
-                //Get HTML from web server
-                var doc = new HtmlDocument();
-                using (var webClient = new WebClient())
+                switch (item.ScraperType)
                 {
-                    webClient.DownloadStringCompleted += (sender, args) =>
-                    {
-                        if (args.Error != null)
-                        {
-                            ExceptionHandlerOnDownloadData(args.Error, item, runningId, retryCount);
-                            return;
-                        }
-
-                        //Load html
-                        doc.LoadHtml(args.Result);
-
-                        //Delete from running
-                        RemoveItemFromRunningCollection(item, runningId);
-
-                        //Raise on data arrived event
-                        item.OnDataArrived?.Invoke(item.Url, item.OptionalArguments, doc);
-                    };
-
-                    webClient.DownloadStringAsync(item.Uri);
+                    case ScraperType.String:
+                        ProcessAsHtml(runningId, item, response, retryCount);
+                        return;
+                    case ScraperType.Binary:
+                        ProcessAsBinary(runningId, item, response, retryCount);
+                        return;
+                    default:
+                        throw new Exception("ScraperType " + item.ScraperType + " not valid");
                 }
+
             }
             catch (Exception ex)
             {
@@ -262,8 +327,77 @@ namespace FireHorse
             }
         }
 
+        private static void ProcessAsHtml(string runningId, ScraperDataWrapper wrapper, ScraperDataResponse response, int retryCount)
+        {
+            //Get HTML from web server
+            using (var webClient = new WebClient())
+            {
+                webClient.DownloadStringCompleted += (sender, args) =>
+                {
+                    if (args.Error != null)
+                    {
+                        ExceptionHandlerOnDownloadData(args.Error, wrapper, runningId, retryCount);
+                        return;
+                    }
+
+                    //Delete from running
+                    RemoveItemFromRunningCollection(wrapper, runningId);
+
+                    //Set response
+                    response.Response = args.Result;
+
+                    //Raise on data arrived event
+                    wrapper.OnDataArrived?.Invoke(response);
+
+                    //Raise a signal to notify that process was end
+                    AfterProcessDataFromWebServer();
+                };
+
+                webClient.DownloadStringAsync(wrapper.Uri);
+            }
+        }
+
+        private static void ProcessAsBinary(string runningId, ScraperDataWrapper wrapper, ScraperDataResponse response, int retryCount)
+        {
+            //Get HTML from web server
+            using (var webClient = new WebClient())
+            {
+                webClient.DownloadDataCompleted += (sender, args) =>
+                {
+                    if (args.Error != null)
+                    {
+                        ExceptionHandlerOnDownloadData(args.Error, wrapper, runningId, retryCount);
+                        return;
+                    }
+
+                    //Delete from running
+                    RemoveItemFromRunningCollection(wrapper, runningId);
+
+                    //Set response
+                    response.Response = args.Result;
+
+                    //Raise on data arrived event
+                    wrapper.OnDataArrived?.Invoke(response);
+
+                    //Raise a signal to notify that process was end
+                    AfterProcessDataFromWebServer();
+                };
+
+                webClient.DownloadDataAsync(wrapper.Uri);
+            }
+        }
+
+        private static void AfterProcessDataFromWebServer()
+        {
+            if (Queues.IsEmpty && Running.IsEmpty)
+                NotifyEndProcess();
+        }
+
         private static void ExceptionHandlerOnDownloadData(Exception ex, ScraperDataWrapper item, string runningId, int retryCount)
         {
+            var response = ScrapperMapper.ToResponse(item);
+            response.Exception = ex;
+
             if (ex is WebException)
             {
                 if (retryCount < MaxRetryCount)
@@ -275,7 +409,7 @@ namespace FireHorse
                 {
                     if (item.OnThrownException != null)
                     {
-                        item.OnThrownException?.Invoke(item.Url, item.OptionalArguments, ex);
+                        item.OnThrownException?.Invoke(response);
                         RemoveItemFromRunningCollection(item, runningId);
                     }
                 }
@@ -284,7 +418,7 @@ namespace FireHorse
             {
                 if (item.OnThrownException != null)
                 {
-                    item.OnThrownException?.Invoke(item.Url, item.OptionalArguments, ex);
+                    item.OnThrownException?.Invoke(response);
                     RemoveItemFromRunningCollection(item, runningId);
                 }
             }
@@ -293,14 +427,26 @@ namespace FireHorse
         private static void RemoveItemFromRunningCollection(ScraperData item, string key, int retryCount = 0)
         {
             string dummyValue;
+            var response = ScrapperMapper.ToResponse(item);
+
             if (!Running.TryRemove(key, out dummyValue))
             {
                 if (retryCount < MaxRetryCount)
                     RemoveItemFromRunningCollection(item, key, retryCount + 1);
                 else
-                    item.OnThrownException?.Invoke(item.Url, item.OptionalArguments, new Exception("The scraper data item cannot be deleted from running collection."));
+                {
+                    response.Exception = new Exception("The scraper data response cannot be deleted from running collection.");
+                    item.OnThrownException?.Invoke(response);
+                }
             }
         }
 
+        private static void NotifyEndProcess()
+        {
+            foreach (var subscription in SubscriptionOnEnd)
+            {
+                subscription.Value.Invoke();
+            }
+        }
     }
 }

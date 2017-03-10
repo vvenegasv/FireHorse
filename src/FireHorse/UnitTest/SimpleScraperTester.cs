@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FireHorse;
+using FireHorse.Dto;
 using HtmlAgilityPack;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -1038,17 +1039,17 @@ namespace UnitTest
                 Thread.Sleep(2000);
         }
 
-        private void OnDequeue(string url, IDictionary<string, string> optionalArguments)
+        private void OnDequeue(ScraperDataResponse response)
         {
             
         }
 
-        private void OnDataArrived(string url, IDictionary<string, string> optionalArguments, HtmlDocument htmlDocument)
+        private void OnDataArrived(ScraperDataResponse response)
         {
             
         }
 
-        private void OnException(string url, IDictionary<string, string> optionalArguments, Exception ex)
+        private void OnException(ScraperDataResponse response)
         {
             
         }

@@ -11,7 +11,7 @@
 	<iconUrl>https://github.com/vvenegasv/fire-horse/blob/master/src/FireHorse/ThirdParty/firehorse.png?raw=true</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Permite tener multiples colas por cada dominio. Se corrigen algunos errores.</releaseNotes>
+    <releaseNotes>Ahora se implementa un evento bajo patrón observable que notifica cuando el proceso concluye. Se elimina la referencia a HTMLAGILITYPACK. Permite descargar datos tanto como string y binarios</releaseNotes>
     <copyright>Copyright © 2014 - 2017 Infodinamica Limitada</copyright>
     <tags>HTMLAGILITYPACK WEBSCRAPER SCRAPER SCRAPER-PRODUCER-CONSUMER</tags>
   </metadata>
