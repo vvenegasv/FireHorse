@@ -125,6 +125,13 @@ foreach (var item in FireHorseManager.CurrentRunningSizeByDomain)
 }
 ```
 
+#### 6.4.- FireHorseManager.CurrentQueues
+FireHorse crea un nuevo queue por cada dominio al cual se realizará el proceso de extracción de datos. Estos queue son consumidos con el patrón productor/consumidor en un hilo independiente. Cuando estos queue quedan vacíos, se elimina el queue y el hilo subyacente. Se puede conocer la cantidad de queues con la propiedad CurrentQueues:
+
+```C#
+Console.WriteLine("Cantidad de colas {0}", FireHorseManager.CurrentQueues);
+```
+
 ## 7.- Detener y Empezar el proceso
 Por defecto, el sistema se iniciará de forma automática, y no se detendrá sin importar si hay elementos en la cola o no. Para detener el proceso manualmente, se puede utilizar el método `Stop()`. La llamada de este método puede tardar un par de segundos en completar, dado que internamente esperará a que los elementos que actualmente están en el estado de "*Running*", terminen su ejecución.
 
