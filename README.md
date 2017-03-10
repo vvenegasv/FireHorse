@@ -56,12 +56,38 @@ FireHorseManager.Enqueue(item);
 ```
 
 #### 4.5.- Esperar a que el proceso concluya
-Para esperar a que el proceso concluya, se puede implementar un while con sleep, de la siguiente manera
+*Opcion A: While con sleep*
+Se puede implementar un while con sleep, de la siguiente manera
 
 ```C#
 while (!FireHorseManager.IsEnded && !FireHorseManager.IsActive)
 {
     Thread.Sleep(2000);                
+}
+```
+*Opción B: Suscribirse al evento EndProcess*
+Se puede suscribirse al evento `FireHorseManager.SubscribeToEndProcess`
+
+```C#
+//Crear un nuevo AutoResetEvent el cual esperará a que se reciba el evento
+private static AutoResetEvent _waitHandle = new AutoResetEvent(false);
+
+function getData()
+{
+  //En algún lugar del código, suscribirse al evento
+  var subscriptionKey = FireHorseManager.SubscribeToEndProcess(OnFinish);
+
+  //Do Something...
+
+  //Esperar a que el evento se reciba
+  _waitHandle.WaitOne();
+}
+
+//Crear método encargado de manejar el evento
+private static void OnFinish()
+{
+    Console.WriteLine("Proceso finalizado.");
+    _waitHandle.Set();
 }
 ```
 
