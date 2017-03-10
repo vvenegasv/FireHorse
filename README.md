@@ -5,7 +5,10 @@ Proyecto opensource que facilita la creación de webscrapper en .NET. Usando el 
 Fire Horse es una clase estática, que implementa N ConcurrentQueue por cada dominio al cual se realizarán consultas; y se implementan tantos hilos como dominios existan, los cuales implementan el patrón Productor/Consumidor
 
 ## 2.- Instalación
-Este complemento puede ser instalado vía Nuget Install-Package FireHorse
+Este complemento puede ser instalado vía Nuget 
+```
+Install-Package FireHorse
+```
 
 ## 3.- Requisitos
 Requiere contar con framework 4.5.2 o superior
