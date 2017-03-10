@@ -1,5 +1,5 @@
 # FireHorse
-Proyecto opensource que facilita la creación de webscrapper en .NET. Está construido sobre HTMLAgilityPack usando el patrón productor/consumidor, en el cual se puede establecer la cantidad máxima de conexiones simultáneas para no saturar el servidor web.
+Proyecto opensource que facilita la creación de webscrapper en .NET. Usando el patrón productor/consumidor, en el cual se puede establecer la cantidad máxima de conexiones simultáneas por dominio para no saturar el servidor web.
 
 ## 1.- Como funciona
 Fire Horse es una clase estática, que implementa N ConcurrentQueue por cada dominio al cual se realizarán consultas; y se implementan tantos hilos como dominios existan, los cuales implementan el patrón Productor/Consumidor
@@ -16,7 +16,7 @@ Primero, se deben definir los métodos o eventos que serán invocados al procesa
 #### 4.1- OnDequeue
 Es invocado cada vez que un elemento es removido de la cola para ser procesado. Un mismo elemento puede ser removido de la cola varias veces, dado a las políticas de reintento que se implementan en el proceso. La firma es la siguiente:
 ```C#
-private void OnDequeue(string url, IDictionary<string, string> optionalArguments)
+private void OnDequeue(ScraperDataResponse response)
 {
   //Implementar lógica.
 }
@@ -27,9 +27,9 @@ Se retorna la URL que será leída, así como una lista de clave-valor opcionale
 #### 4.2- OnException
 Es invocado cuando se produce un error y la política de reintentos establecidas fue superada. Por ejemplo, si se establece una política de tres reintentos, los primeros tres errores no gatillarán este evento; recién el cuarto error será notificado. La firma es la siguiente
 ```C#
-private static void OnException(string url, IDictionary<string, string> optionalArguments, Exception ex)
+private static void OnException(ScraperDataResponse response)
 {
-
+  Console.WriteLine(response.Exception);
 }
 ```
 
@@ -37,9 +37,19 @@ private static void OnException(string url, IDictionary<string, string> optional
 Invocado cada vez que se retorna satisfactoriamente la información desde el servidor. La firma es la siguiente:
 
 ```C#
-private static void OnDataArrived(string url, IDictionary<string, string> optionalArguments, HtmlDocument htmlDocument)
+private static void OnDataArrived(ScraperDataResponse response)
 {
-
+  switch (response.ScraperType)
+  {
+      case ScraperType.Binary:
+          var data = (byte[]) response.Response;
+          break;
+      case ScraperType.String:
+          var html = (string) response.Response;
+          break;
+      default:
+          throw new Exception("Tipo de scraper inválido");
+  }
 }
 ```
 
@@ -52,6 +62,7 @@ item.Url = url;
 item.OnDequeue = OnDequeue;
 item.OnDataArrived = OnDataArrived;
 item.OnThrownException = OnException;
+item.ScraperType = ScraperType.String; //o ScraperType.Binary para retornar byte[]
 FireHorseManager.Enqueue(item);
 ```
 
