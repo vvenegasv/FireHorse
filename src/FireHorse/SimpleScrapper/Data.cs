@@ -8,6 +8,8 @@ namespace SimpleScrapper
 {
     internal static class Data
     {
+        public static readonly string URLFILE = "http://www.aemet.es/es/eltiempo/observacion/ultimosdatos_espana_resumenes-diarios-anteriores.xls?k=&datos=det&w=2&f=&x=d07";
+
         public static readonly IList<string> URLS = new List<string>()
         {
             "http://amarillas.emol.com/acciones-y-valores",
