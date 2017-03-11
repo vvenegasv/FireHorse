@@ -113,26 +113,32 @@ namespace FireHorse
             //gets the domain
             var domain = uri.Authority.ToLower();
 
-            //Check if exists a queue from domain
-            if (Queues.Any(x => x.Key == domain))
+            //If enqueue method was called in parallel, with no lock
+            //could exists multiple consume threads for the same domain
+            //With lock we fix this problem.
+            lock (LockerObj)
             {
-                var queue = Queues[domain];
-                queue.Enqueue(ScrapperMapper.ToWrapper(data, domain, uri));
-            }
-            else
-            {
-                var queue = new ConcurrentQueue<ScraperDataWrapper>();
-                queue.Enqueue(ScrapperMapper.ToWrapper(data, domain, uri));
-                if(!Queues.TryAdd(domain, queue))
-                    throw new Exception("Unexpected error when try to create a new Queue for domain " + domain);
+                //Check if exists a queue from domain
+                if (Queues.Any(x => x.Key == domain))
+                {
+                    var queue = Queues[domain];
+                    queue.Enqueue(ScrapperMapper.ToWrapper(data, domain, uri));
+                }
+                else
+                {
+                    var queue = new ConcurrentQueue<ScraperDataWrapper>();
+                    queue.Enqueue(ScrapperMapper.ToWrapper(data, domain, uri));
+                    if (!Queues.TryAdd(domain, queue))
+                        if (!Queues.Any(x => x.Key == domain))
+                            throw new Exception("Unexpected error when try to create a new Queue for domain " + domain);
 
-                //start a new queue process
-                var t = Task.Factory.StartNew(() => ConsumeFromQueue(domain, queue));
-                if(!_queueThreads.TryAdd(domain, t))
-                    throw new Exception("Unexpected error when try to add task of queue on QueueThreads for domain " + domain);
+                    //start a new queue process
+                    var t = Task.Factory.StartNew(() => ConsumeFromQueue(domain, queue));
+                    if (!_queueThreads.TryAdd(domain, t))
+                        if (!_queueThreads.Any(x => x.Key == domain))
+                            throw new Exception("Unexpected error when try to add a task of queue on QueueThreads for domain " + domain);
+                }
             }
-
-            
         }
 
         /// <summary>
@@ -284,13 +290,17 @@ namespace FireHorse
                 ConcurrentQueue<ScraperDataWrapper> dummyQueue;
                 lock (LockerObj)
                 {
-                    //Check if queue is empty
-                    if (Queues[domain].IsEmpty)
+                    //Check if queue exists
+                    if (Queues.Any(x => x.Key == domain))
                     {
-                        if (Queues.TryRemove(domain, out dummyQueue))
+                        //Check if queue is empty
+                        if (Queues[domain].IsEmpty)
                         {
-                            Task t;
-                            _queueThreads.TryRemove(domain, out t);
+                            if (Queues.TryRemove(domain, out dummyQueue))
+                            {
+                                Task t;
+                                _queueThreads.TryRemove(domain, out t);
+                            }
                         }
                     }
                 }
