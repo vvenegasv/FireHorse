@@ -11,7 +11,7 @@
 	<iconUrl>https://github.com/vvenegasv/fire-horse/blob/master/src/FireHorse/ThirdParty/firehorse.png?raw=true</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Se corrige error que no notificaba el evento de fin de proceso</releaseNotes>
+    <releaseNotes>Se corrige un error en la implementación de bloqueos con lock</releaseNotes>
     <copyright>Copyright © 2014 - 2017 Infodinamica Limitada</copyright>
     <tags>HTMLAGILITYPACK WEBSCRAPER SCRAPER SCRAPER-PRODUCER-CONSUMER</tags>
   </metadata>
