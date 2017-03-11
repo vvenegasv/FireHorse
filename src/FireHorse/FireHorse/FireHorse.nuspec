@@ -11,7 +11,7 @@
 	<iconUrl>https://github.com/vvenegasv/fire-horse/blob/master/src/FireHorse/ThirdParty/firehorse.png?raw=true</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Se corrige un error en la implementación de bloqueos con lock</releaseNotes>
+    <releaseNotes>Se corrige error que creaba más de un thread para los consumidores por dominio. Esto ocurría cuando se agregaban elementos del mismo dominio en paralelo</releaseNotes>
     <copyright>Copyright © 2014 - 2017 Infodinamica Limitada</copyright>
     <tags>HTMLAGILITYPACK WEBSCRAPER SCRAPER SCRAPER-PRODUCER-CONSUMER</tags>
   </metadata>
