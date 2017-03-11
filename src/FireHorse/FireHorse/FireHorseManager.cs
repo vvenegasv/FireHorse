@@ -295,6 +295,7 @@ namespace FireHorse
                         }
                     }
                 }
+                CheckIfProcessIsFinished();
             });
         }
 
@@ -350,7 +351,7 @@ namespace FireHorse
                     wrapper.OnDataArrived?.Invoke(response);
 
                     //Raise a signal to notify that process was end
-                    AfterProcessDataFromWebServer();
+                    CheckIfProcessIsFinished();
                 };
 
                 webClient.DownloadStringAsync(wrapper.Uri);
@@ -380,14 +381,14 @@ namespace FireHorse
                     wrapper.OnDataArrived?.Invoke(response);
 
                     //Raise a signal to notify that process was end
-                    AfterProcessDataFromWebServer();
+                    CheckIfProcessIsFinished();
                 };
 
                 webClient.DownloadDataAsync(wrapper.Uri);
             }
         }
 
-        private static void AfterProcessDataFromWebServer()
+        private static void CheckIfProcessIsFinished()
         {
             if (Queues.IsEmpty && Running.IsEmpty)
                 NotifyEndProcess();
