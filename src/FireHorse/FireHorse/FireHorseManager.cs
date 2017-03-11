@@ -15,6 +15,7 @@ namespace FireHorse
     {
         private static bool _canRun;
         private static bool _isRunning;
+        private static readonly Object LockerObj = new Object();
         //Dictionary with domain and concurrent queue.
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
         //Dictionary with DictionaryId and Domain. Util to know how many running elements there is by domain
@@ -140,10 +141,9 @@ namespace FireHorse
         public static void Start()
         {
             _canRun = true;
-            var lockerObj = new Object();
             if (!_isRunning)
             {
-                lock (lockerObj)
+                lock (LockerObj)
                 {
                     if (!_isRunning)
                     {
@@ -281,9 +281,8 @@ namespace FireHorse
         {
             Task.Factory.StartNew(() =>
             {
-                var lockObject = new Object();
                 ConcurrentQueue<ScraperDataWrapper> dummyQueue;
-                lock (lockObject)
+                lock (LockerObj)
                 {
                     //Check if queue is empty
                     if (Queues[domain].IsEmpty)
