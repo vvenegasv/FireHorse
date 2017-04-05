@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,34 +12,56 @@ using FireHorse.Mappers;
 
 namespace FireHorse
 {
-    public static class FireHorseManager
+    public class FireHorseManager
     {
-        private static bool _canRun;
-        private static bool _isRunning;
-        private static readonly Object LockerObj = new Object();
+        private static volatile FireHorseManager _instance;
+        private static object _syncRoot = new Object();
+
+        private bool _canRun;
+        private bool _isRunning;
+        private readonly Object LockerObj = new Object();
         //Dictionary with domain and concurrent queue.
-        private static readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
+        private readonly ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>> Queues = new ConcurrentDictionary<string, ConcurrentQueue<ScraperDataWrapper>>();
         //Dictionary with DictionaryId and Domain. Util to know how many running elements there is by domain
-        private static readonly ConcurrentDictionary<string, string> Running = new ConcurrentDictionary<string, string>(160, 9999);
+        private readonly ConcurrentDictionary<string, string> Running = new ConcurrentDictionary<string, string>(160, 9999);
         //Dictionary with subscription to notify when process ends
-        private static readonly ConcurrentDictionary<string, Action> SubscriptionOnEnd = new ConcurrentDictionary<string, Action>();
+        private readonly ConcurrentDictionary<string, Action> SubscriptionOnEnd = new ConcurrentDictionary<string, Action>();
         //Dictionary with domain and task. It is use to stop and start the process
-        private static ConcurrentDictionary<string, Task> _queueThreads = new ConcurrentDictionary<string, Task>();
-        
+        private ConcurrentDictionary<string, Task> _queueThreads = new ConcurrentDictionary<string, Task>();
+
+        /// <summary>
+        /// Retorna la instancia de la clase
+        /// </summary>
+        public static FireHorseManager Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    lock (_syncRoot)
+                    {
+                        if (_instance == null)
+                            _instance = new FireHorseManager();
+                    }
+                }
+                return _instance;
+            }
+        }
+
         /// <summary>
         /// Get or Set max running workers at the same time. Default value is 40
         /// </summary>
-        public static int MaxRunningElementsByDomain { get; set; } = 40;
+        public int MaxRunningElementsByDomain { get; set; } = 40;
 
         /// <summary>
         /// Get or Set max retry counts or errors. Default value is 5
         /// </summary>
-        public static int MaxRetryCount { get; set; } = 5;
+        public int MaxRetryCount { get; set; } = 5;
         
         /// <summary>
         /// Get the amount of elements in running
         /// </summary>
-        public static int CurrentRunningSize
+        public int CurrentRunningSize
         {
             get { return Running.Count; }
         }
@@ -46,7 +69,7 @@ namespace FireHorse
         /// <summary>
         /// Get the amount of elements in running by domain
         /// </summary>
-        public static IDictionary<string, int> CurrentRunningSizeByDomain
+        public IDictionary<string, int> CurrentRunningSizeByDomain
         {
             get
             {
@@ -60,12 +83,12 @@ namespace FireHorse
         /// <summary>
         /// Get the amount of elements in queue
         /// </summary>
-        public static int CurrentQueueSize
+        public int CurrentQueueSize
         {
             get { return Queues.Select(x => x.Value.Count).Sum(); }
         }
 
-        public static int CurrentQueues
+        public int CurrentQueues
         {
             get { return Queues.Count; }
         }
@@ -74,7 +97,7 @@ namespace FireHorse
         /// Check if process end. Return true if Queue is empty and there isn't running elements.
         /// </summary>
         /// <returns></returns>
-        public static bool IsEnded
+        public bool IsEnded
         {
             get { return Queues.IsEmpty && Running.IsEmpty; }
         }
@@ -82,12 +105,12 @@ namespace FireHorse
         /// <summary>
         /// Check if process is running. It returns true if process is wating for items, no matter if queue is empty or not
         /// </summary>
-        public static bool IsActive
+        public bool IsActive
         {
             get { return _isRunning; }
         }
 
-        static FireHorseManager()
+        private FireHorseManager()
         {
             _canRun = true;
             _isRunning = true;
@@ -98,7 +121,7 @@ namespace FireHorse
         /// </summary>
         /// <exception cref="ArgumentException">If Url or OnDataArrived is not provider</exception>
         /// <param name="data">Item to scraper</param>
-        public static void Enqueue(ScraperData data)
+        public void Enqueue(ScraperData data)
         {
             if (string.IsNullOrWhiteSpace(data.Url))
                 throw new ArgumentException("URL is required.");
@@ -144,7 +167,7 @@ namespace FireHorse
         /// <summary>
         /// Start scraper process. By default, the scraper will start automatically and never stop
         /// </summary>
-        public static void Start()
+        public void Start()
         {
             _canRun = true;
             if (!_isRunning)
@@ -169,7 +192,7 @@ namespace FireHorse
         /// Stop scraper process. Need to be manually started before stop it. 
         /// Also, it will be automatically started when put a new response in queue
         /// </summary>
-        public static void Stop()
+        public void Stop()
         {
             _canRun = false;
             //waits for all queue threads end
@@ -177,7 +200,7 @@ namespace FireHorse
                 Thread.Sleep(2000);
 
             //waits for all running elements finishing
-            while(FireHorseManager.CurrentRunningSize > 0)
+            while(CurrentRunningSize > 0)
                 Thread.Sleep(2000);
 
             _isRunning = false;
@@ -190,7 +213,7 @@ namespace FireHorse
         /// <exception cref="ArgumentNullException">If subscription is null</exception>
         /// <exception cref="Exception">If cannot be add a new element in subscription list</exception>
         /// <returns></returns>
-        public static string SubscribeToEndProcess(Action subscription)
+        public string SubscribeToEndProcess(Action subscription)
         {
             if(subscription==null)
                 throw new ArgumentNullException("subscription", "The subscription parameter is required. It cannot be null");
@@ -208,7 +231,7 @@ namespace FireHorse
         /// <exception cref="ArgumentException">If key provided not exists in subscription list</exception>
         /// <exception cref="Exception">If cannot be remove the element of subscription list</exception>
         /// <param name="key">Key of subscription returned by SubscribeToEndProcess</param>
-        public static void UnsuscribeToEndProcess(string key)
+        public void UnsuscribeToEndProcess(string key)
         {
             if(string.IsNullOrWhiteSpace(key))
                 throw new ArgumentNullException("key", "The key parameter is requiered. It cannot be empty or null");
@@ -222,7 +245,7 @@ namespace FireHorse
         }
 
         
-        private static async void ConsumeFromQueue(string domain, ConcurrentQueue<ScraperDataWrapper> queue)
+        private async void ConsumeFromQueue(string domain, ConcurrentQueue<ScraperDataWrapper> queue)
         {
             int throtledCount = 0;
             int emptyQueueCount = 0;
@@ -283,7 +306,7 @@ namespace FireHorse
         /// Remove the queue from Queues. 
         /// </summary>
         /// <param name="domain">Domain</param>
-        private static void OnConsumeFromQueueOut(string domain)
+        private void OnConsumeFromQueueOut(string domain)
         {
             Task.Factory.StartNew(() =>
             {
@@ -308,7 +331,7 @@ namespace FireHorse
             });
         }
 
-        private static void GetDataFromWebServer(string runningId, ScraperDataWrapper item, int retryCount = 0)
+        private void GetDataFromWebServer(string runningId, ScraperDataWrapper item, int retryCount = 0)
         {
             try
             {
@@ -337,7 +360,7 @@ namespace FireHorse
             }
         }
 
-        private static void ProcessAsHtml(string runningId, ScraperDataWrapper wrapper, ScraperDataResponse response, int retryCount)
+        private void ProcessAsHtml(string runningId, ScraperDataWrapper wrapper, ScraperDataResponse response, int retryCount)
         {
             //Get HTML from web server
             using (var webClient = new WebClient())
@@ -367,7 +390,7 @@ namespace FireHorse
             }
         }
 
-        private static void ProcessAsBinary(string runningId, ScraperDataWrapper wrapper, ScraperDataResponse response, int retryCount)
+        private void ProcessAsBinary(string runningId, ScraperDataWrapper wrapper, ScraperDataResponse response, int retryCount)
         {
             //Get HTML from web server
             using (var webClient = new WebClient())
@@ -397,13 +420,13 @@ namespace FireHorse
             }
         }
 
-        private static void CheckIfProcessIsFinished()
+        private void CheckIfProcessIsFinished()
         {
             if (Queues.IsEmpty && Running.IsEmpty)
                 NotifyEndProcess();
         }
 
-        private static void ExceptionHandlerOnDownloadData(Exception ex, ScraperDataWrapper item, string runningId, int retryCount)
+        private void ExceptionHandlerOnDownloadData(Exception ex, ScraperDataWrapper item, string runningId, int retryCount)
         {
             var response = ScrapperMapper.ToResponse(item);
             response.Exception = ex;
@@ -434,7 +457,7 @@ namespace FireHorse
             }
         }
 
-        private static void RemoveItemFromRunningCollection(ScraperData item, string key, int retryCount = 0)
+        private void RemoveItemFromRunningCollection(ScraperData item, string key, int retryCount = 0)
         {
             string dummyValue;
             var response = ScrapperMapper.ToResponse(item);
@@ -451,7 +474,7 @@ namespace FireHorse
             }
         }
 
-        private static void NotifyEndProcess()
+        private void NotifyEndProcess()
         {
             foreach (var subscription in SubscriptionOnEnd)
             {

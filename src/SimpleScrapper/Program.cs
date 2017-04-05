@@ -19,6 +19,7 @@ namespace SimpleScrapper
         private static Stopwatch _chronometer;
         private static bool _wasFinish;
         private static AutoResetEvent _waitHandle = new AutoResetEvent(false);
+        private static FireHorseManager _fireHorse;
 
         static void Main(string[] args)
         {
@@ -28,9 +29,10 @@ namespace SimpleScrapper
         private static void Run()
         {
             _wasFinish = false;
-            var subscriptionKey = FireHorseManager.SubscribeToEndProcess(OnFinish);
-            
-            FireHorseManager.MaxRetryCount = 0;
+            _fireHorse = FireHorseManager.Instance;
+            var subscriptionKey = _fireHorse.SubscribeToEndProcess(OnFinish);
+
+            _fireHorse.MaxRetryCount = 0;
             _chronometer = new Stopwatch();
             _chronometer.Start();
 
@@ -43,13 +45,13 @@ namespace SimpleScrapper
                 item.OnDataArrived = OnDataArrived;
                 item.OnThrownException = OnException;
                 item.ScraperType = ScraperType.String;
-                FireHorseManager.Enqueue(item);
+                _fireHorse.Enqueue(item);
                 _totalElementsCount++;
             }
-            
-            
 
-            FireHorseManager.Enqueue(new ScraperData
+
+
+            _fireHorse.Enqueue(new ScraperData
             {
                 Url = Data.URLFILE,
                 OnDequeue = OnDequeue,
@@ -75,13 +77,13 @@ namespace SimpleScrapper
                 Console.WriteLine("Elementos con errores {0}", _errorCount);
                 Console.WriteLine("Elementos finalizados {0}", _readCount + _errorCount);
                 Console.WriteLine("Elementos ingresados en queue {0}", _totalElementsCount);
-                Console.WriteLine("Elementos en ejecución {0}", FireHorseManager.CurrentRunningSize);
-                Console.WriteLine("Cantidad de colas {0}", FireHorseManager.CurrentQueues);
-                Console.WriteLine("Elementos en cola {0}", FireHorseManager.CurrentQueueSize);
+                Console.WriteLine("Elementos en ejecución {0}", _fireHorse.CurrentRunningSize);
+                Console.WriteLine("Cantidad de colas {0}", _fireHorse.CurrentQueues);
+                Console.WriteLine("Elementos en cola {0}", _fireHorse.CurrentQueueSize);
 
                 Console.WriteLine("Detalle de Colas");
                 Console.WriteLine("==================");
-                foreach (var item in FireHorseManager.CurrentRunningSizeByDomain)
+                foreach (var item in _fireHorse.CurrentRunningSizeByDomain)
                 {
                     Console.WriteLine("Dominio:{0}, Cantidad:{1}", item.Key, item.Value);
                 }

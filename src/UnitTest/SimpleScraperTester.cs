@@ -1023,6 +1023,7 @@ namespace UnitTest
         [TestMethod]
         public void TestGetSimpleUrl()
         {
+            var firHorse = FireHorseManager.Instance;
 
             foreach (var url in _urls)
             {
@@ -1030,12 +1031,12 @@ namespace UnitTest
                 item.Url = url;
                 item.OnDequeue = this.OnDequeue;
                 item.OnDataArrived = this.OnDataArrived;
-                item.OnThrownException = this.OnException;
-                FireHorseManager.Enqueue(item);
+                item.OnThrownException = this.OnException;                
+                firHorse.Enqueue(item);
             }
 
             //System wait until all consumers end and empty queue event has raised
-            while (FireHorseManager.CurrentRunningSize > 0 || FireHorseManager.CurrentQueueSize > 0)
+            while (firHorse.CurrentRunningSize > 0 || firHorse.CurrentQueueSize > 0)
                 Thread.Sleep(2000);
         }
 
