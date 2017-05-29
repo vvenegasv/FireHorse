@@ -18,6 +18,7 @@ namespace FireHorse.Mappers
                 OptionalArguments = item.OptionalArguments,
                 Response = null,
                 Url = item.Url,
+                Proxy = item.Proxy,
                 ScraperType = item.ScraperType
             };
         }
@@ -29,6 +30,7 @@ namespace FireHorse.Mappers
                 Domain = domain,
                 Uri = uri,
                 Url = item.Url,
+                Proxy = item.Proxy,                
                 ScraperType = item.ScraperType,
                 OptionalArguments = item.OptionalArguments,
                 OnThrownException = item.OnThrownException,
