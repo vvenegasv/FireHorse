@@ -11,7 +11,7 @@
 	<iconUrl>https://github.com/vvenegasv/fire-horse/blob/master/src/FireHorse/ThirdParty/firehorse.png?raw=true</iconUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>Se cambia la clase estática FireHorseManager al patrón singleton</releaseNotes>
+    <releaseNotes>Se permite utilizar proxy para las peticiones http get</releaseNotes>
     <copyright>Copyright © 2014 - 2017 Infodinamica Limitada</copyright>
     <tags>HTMLAGILITYPACK WEBSCRAPER SCRAPER SCRAPER-PRODUCER-CONSUMER</tags>
   </metadata>
