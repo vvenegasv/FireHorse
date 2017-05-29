@@ -49,6 +49,7 @@
     <Compile Include="Dto\ScraperDataResponse.cs" />
     <Compile Include="Dto\ScraperDataWrapper.cs" />
     <Compile Include="Dto\ScraperType.cs" />
+    <Compile Include="ProxyFactory.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

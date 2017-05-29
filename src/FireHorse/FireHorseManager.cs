@@ -365,6 +365,10 @@ namespace FireHorse
             //Get HTML from web server
             using (var webClient = new WebClient())
             {
+                //If proxy was configured, it attach to webclient instance
+                if (wrapper.Proxy != null)
+                    webClient.Proxy = wrapper.Proxy;
+
                 webClient.DownloadStringCompleted += (sender, args) =>
                 {
                     if (args.Error != null)
@@ -395,6 +399,10 @@ namespace FireHorse
             //Get HTML from web server
             using (var webClient = new WebClient())
             {
+                //If proxy was configured, it attach to webclient instance
+                if (wrapper.Proxy != null)
+                    webClient.Proxy = wrapper.Proxy;
+
                 webClient.DownloadDataCompleted += (sender, args) =>
                 {
                     if (args.Error != null)
