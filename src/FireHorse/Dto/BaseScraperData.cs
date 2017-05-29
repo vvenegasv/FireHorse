@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Net;
 
 namespace FireHorse.Dto
 {
@@ -9,7 +10,13 @@ namespace FireHorse.Dto
         /// Get or Set the URL to getting data
         /// </summary>
         public string Url { get; set; }
-
+               
+        /// <summary>
+        /// Optional
+        /// Get or Set the proxy to bypass default internet gateway
+        /// </summary>
+        public WebProxy Proxy { get; set; }
+         
         /// <summary>
         /// Optional
         /// Get or Set a usefull dictionary to gather all html pieces of a bigger one.
